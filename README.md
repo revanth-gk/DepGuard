@@ -1,6 +1,6 @@
 # DepGuard
 
-DepGuard scans a public GitHub repository for known npm dependency vulnerabilities, records an account-scoped report, and checks suggested package versions against OSV before presenting them.
+DepGuard scans public GitHub repositories for known npm dependency vulnerabilities, stores account-scoped or anonymous reports, and checks suggested package versions against OSV before presenting them.
 
 ## Architecture
 
@@ -43,7 +43,9 @@ To clear saved state, run `docker compose down --volumes`; this permanently dele
 
 ## Accounts and repository scans
 
-Create an account using the same username as a public GitHub profile, then sign in and enter one repository name owned by that username. A report is stored under the signed-in account and can be reopened from its history. Saved scan and recommendation endpoints enforce account ownership. The account name is checked against GitHub, but this username/password flow does **not** prove control of that GitHub account; do not treat it as GitHub OAuth or identity verification.
+Anyone can paste a public GitHub repository URL in **Public review** and run the same dependency checks without signing in. Anonymous reports are stored without account ownership for aggregate evidence, but are not added to personal history. Public scans are limited to three attempts per client IP every 15 minutes and two simultaneous scans per server; public recommendation requests are limited to ten per IP every 15 minutes.
+
+To keep a private review history, create an account using the same username as a public GitHub profile, then sign in and enter one repository name owned by that username. A report is stored under the signed-in account and can be reopened from its history. Saved scan and recommendation endpoints enforce account ownership. The account name is checked against GitHub, but this username/password flow does **not** prove control of that GitHub account; do not treat it as GitHub OAuth or identity verification.
 
 Passwords are stored as unique-salt scrypt hashes. Session bearer tokens are random, held in `HttpOnly; SameSite=Strict` cookies, and stored only as SHA-256 digests in PostgreSQL. Account endpoints are rate-limited. Accounts do not grant access to private repositories.
 
@@ -67,8 +69,10 @@ The browser console does not run arbitrary SQL and cannot create/drop tables or 
 - `POST /api/auth/logout` and `GET /api/auth/me` — end/read the current session.
 - `GET /api/repositories` — list public repositories belonging to the signed-in username.
 - `POST /api/scan` with `{ "repositoryName": "repo-name" }` — inspect one owned public repository.
+- `POST /api/public-scan` with `{ "repositoryUrl": "https://github.com/owner/repo" }` — inspect a public repository without an account.
 - `GET /api/history` and `GET /api/history/:id` — list/open the signed-in account's reports.
 - `POST /api/history/:id/recommendations` — recommend verified upgrades and optional verified alternatives.
+- `POST /api/public-scans/:id/recommendations` — request verified recommendations for an anonymous public scan.
 - `GET /api/showcase` — display aggregate evidence from actual saved scans.
 - `/api/admin/tables` — admin-only table metadata, row browsing, row updates, and row deletion.
 

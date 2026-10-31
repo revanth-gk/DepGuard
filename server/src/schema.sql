@@ -112,3 +112,4 @@ CREATE TABLE IF NOT EXISTS scan_recommendations (
 );
 
 CREATE INDEX IF NOT EXISTS scan_recommendations_scan_idx ON scan_recommendations (scan_id);
+ALTER TABLE scan_recommendations ALTER COLUMN account_id DROP NOT NULL;

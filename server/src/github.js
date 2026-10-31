@@ -47,6 +47,26 @@ export async function getPublicGithubUser(username) {
   return { login: user.login, name: user.name ?? null, avatarUrl: user.avatar_url ?? null };
 }
 
+export async function getPublicGithubRepository(owner, repository) {
+  const data = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`);
+  if (data.private !== false) {
+    throw new HttpError(404, "Only public GitHub repositories can be reviewed.", "PUBLIC_REPOSITORY_REQUIRED");
+  }
+  if (typeof data.name !== "string" || typeof data.full_name !== "string" ||
+      typeof data.html_url !== "string" || typeof data.owner?.login !== "string") {
+    throw new HttpError(502, "GitHub returned an unexpected repository.", "GITHUB_RESPONSE");
+  }
+  return {
+    name: data.name,
+    full_name: data.full_name,
+    html_url: data.html_url,
+    default_branch: data.default_branch ?? null,
+    archived: Boolean(data.archived),
+    private: false,
+    owner: { login: data.owner.login }
+  };
+}
+
 function isEligibleManifest(path) {
   const parts = path.split("/");
   return parts.at(-1) === "package.json" && !parts.slice(0, -1).some((part) => excluded.has(part));

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { listRepositories, listRepositoryFiles, getRepositoryFile } from "./github.js";
+import { listRepositories, listRepositoryFiles, getPublicGithubRepository, getRepositoryFile } from "./github.js";
 import { selectLockfileForManifest, resolveWithNpmLock } from "./lockfile.js";
 import { mapWithConcurrency, queryOsv } from "./osv.js";
 import { HttpError } from "./errors.js";
@@ -101,21 +101,9 @@ async function inspectRepository(repository) {
   return result;
 }
 
-export async function runScan(username, repositoryName) {
-  const discovered = await listRepositories(username);
-  const selectedRepositories = repositoryName
-    ? discovered.filter((repository) =>
-      repository.name.toLowerCase() === repositoryName.toLowerCase() &&
-      repository.owner.login.toLowerCase() === username.toLowerCase())
-    : discovered;
-  if (repositoryName && selectedRepositories.length === 0) {
-    throw new HttpError(404, "That public repository was not found under your account.", "REPOSITORY_NOT_FOUND");
-  }
-  if (repositoryName && selectedRepositories.length > 1) {
-    throw new HttpError(400, "More than one repository matched that name. Use the full repository name.", "AMBIGUOUS_REPOSITORY");
-  }
-  const summary = emptySummary(discovered.length);
-  if (repositoryName) summary.repositoriesFound = selectedRepositories.length;
+async function scanRepositories(username, selectedRepositories, repositoriesFound, repositoryName, publicScan) {
+  const summary = emptySummary(repositoriesFound);
+  summary.repositoriesFound = repositoryName ? selectedRepositories.length : repositoriesFound;
   const repositories = await mapWithConcurrency(selectedRepositories, inspectRepository);
   for (const repository of repositories) {
     summary.repositoriesScanned += repository.status === "failed" ? 0 : 1;
@@ -160,6 +148,7 @@ export async function runScan(username, repositoryName) {
     scanId: randomUUID(),
     username,
     repositoryName: repositoryName ?? null,
+    publicScan,
     status: summary.scanErrors ? "partial" : "completed",
     scannedAt: new Date().toISOString(),
     persisted: true,
@@ -167,4 +156,25 @@ export async function runScan(username, repositoryName) {
     repositories,
     errors: repositories.flatMap((repository) => repository.errors.map((message) => ({ repository: repository.fullName, message })))
   };
+}
+
+export async function runScan(username, repositoryName) {
+  const discovered = await listRepositories(username);
+  const selectedRepositories = repositoryName
+    ? discovered.filter((repository) =>
+      repository.name.toLowerCase() === repositoryName.toLowerCase() &&
+      repository.owner.login.toLowerCase() === username.toLowerCase())
+    : discovered;
+  if (repositoryName && selectedRepositories.length === 0) {
+    throw new HttpError(404, "That public repository was not found under your account.", "REPOSITORY_NOT_FOUND");
+  }
+  if (repositoryName && selectedRepositories.length > 1) {
+    throw new HttpError(400, "More than one repository matched that name. Use the full repository name.", "AMBIGUOUS_REPOSITORY");
+  }
+  return scanRepositories(username, selectedRepositories, discovered.length, repositoryName, false);
+}
+
+export async function runPublicRepositoryScan(owner, repositoryName) {
+  const repository = await getPublicGithubRepository(owner, repositoryName);
+  return scanRepositories(repository.owner.login, [repository], 1, repository.name, true);
 }

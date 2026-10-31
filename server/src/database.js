@@ -230,7 +230,7 @@ export async function getSavedScan(id, accountId) {
 }
 
 export async function getRecommendationSource(scanId, accountId, packageName, currentVersion) {
-  const result = await pool.query("SELECT report FROM scans WHERE id = $1 AND account_id = $2", [scanId, accountId]);
+  const result = await pool.query("SELECT report FROM scans WHERE id = $1 AND account_id IS NOT DISTINCT FROM $2", [scanId, accountId]);
   const report = result.rows[0]?.report;
   if (!report) return null;
   for (const repository of report.repositories) {

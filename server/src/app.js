@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { HttpError } from "./errors.js";
-import { runScan } from "./scan.js";
+import { runPublicRepositoryScan, runScan } from "./scan.js";
+import { parsePublicGithubRepositoryUrl } from "./github-url.js";
 import {
   checkDatabase,
   changeAccountPassword,
@@ -37,6 +38,13 @@ const app = express();
 const windows = new Map();
 const windowMs = 15 * 60 * 1000;
 const maxRequests = 10;
+const publicScanAttempts = new Map();
+const publicScanWindowMs = 15 * 60 * 1000;
+const maxPublicScansPerWindow = 3;
+const maxConcurrentPublicScans = 2;
+const publicRecommendationAttempts = new Map();
+const maxPublicRecommendationsPerWindow = 10;
+let activePublicScans = 0;
 const authAttempts = new Map();
 const authWindowMs = 15 * 60 * 1000;
 
@@ -64,6 +72,24 @@ function rateLimitAuth(request, response) {
   current.count += 1;
   if (current.count <= maxRequests) return false;
   response.status(429).json({ error: "Account request limit reached. Try again in 15 minutes.", code: "AUTH_RATE_LIMITED" });
+  return true;
+}
+
+function rateLimitPublicRecommendations(request, response) {
+  const now = Date.now();
+  if (publicRecommendationAttempts.size > 5000) {
+    for (const [ip, entry] of publicRecommendationAttempts) {
+      if (now - entry.startedAt >= publicScanWindowMs) publicRecommendationAttempts.delete(ip);
+    }
+  }
+  const current = publicRecommendationAttempts.get(request.ip);
+  if (!current || now - current.startedAt >= publicScanWindowMs) {
+    publicRecommendationAttempts.set(request.ip, { startedAt: now, count: 1 });
+    return false;
+  }
+  current.count += 1;
+  if (current.count <= maxPublicRecommendationsPerWindow) return false;
+  response.status(429).json({ error: "Public recommendation limit reached. Try again in 15 minutes.", code: "PUBLIC_RECOMMENDATION_RATE_LIMITED" });
   return true;
 }
 
@@ -257,6 +283,24 @@ app.post("/api/history/:id/recommendations", requireAccount, async (request, res
     next(error);
   }
 });
+app.post("/api/public-scans/:id/recommendations", async (request, response, next) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.params.id)) {
+    response.status(400).json({ error: "Scan ID is invalid.", code: "INVALID_SCAN_ID" });
+    return;
+  }
+  const { packageName, currentVersion } = request.body ?? {};
+  if (!/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(packageName ?? "") ||
+      typeof currentVersion !== "string" || currentVersion.length > 128) {
+    response.status(400).json({ error: "Provide a package name and exact version from this report.", code: "INVALID_DEPENDENCY" });
+    return;
+  }
+  if (rateLimitPublicRecommendations(request, response)) return;
+  try {
+    response.json(await recommendForDependency(null, request.params.id, packageName, currentVersion));
+  } catch (error) {
+    next(error);
+  }
+});
 app.post("/api/scan", requireAccount, async (request, response, next) => {
   const now = Date.now();
   const ip = request.ip;
@@ -279,6 +323,45 @@ app.post("/api/scan", requireAccount, async (request, response, next) => {
     response.json(report);
   } catch (error) {
     next(error);
+  }
+});
+app.post("/api/public-scan", async (request, response, next) => {
+  let repository;
+  try {
+    repository = parsePublicGithubRepositoryUrl(request.body?.repositoryUrl);
+  } catch (error) {
+    next(error);
+    return;
+  }
+
+  const now = Date.now();
+  const ip = request.ip;
+  const current = publicScanAttempts.get(ip);
+  if (activePublicScans >= maxConcurrentPublicScans) {
+    response.status(503).json({ error: "Public scans are busy. Try again shortly.", code: "PUBLIC_SCANS_BUSY" });
+    return;
+  }
+  if (publicScanAttempts.size > 5000) {
+    for (const [address, entry] of publicScanAttempts) {
+      if (now - entry.startedAt >= publicScanWindowMs) publicScanAttempts.delete(address);
+    }
+  }
+  if (!current || now - current.startedAt >= publicScanWindowMs) {
+    publicScanAttempts.set(ip, { startedAt: now, count: 1 });
+  } else if (++current.count > maxPublicScansPerWindow) {
+    response.status(429).json({ error: "Public scan limit reached. Try again in 15 minutes.", code: "PUBLIC_SCAN_RATE_LIMITED" });
+    return;
+  }
+
+  activePublicScans += 1;
+  try {
+    const report = await runPublicRepositoryScan(repository.owner, repository.repository);
+    await saveScan(report, null);
+    response.json(report);
+  } catch (error) {
+    next(error);
+  } finally {
+    activePublicScans -= 1;
   }
 });
 app.get("/api/admin/tables", requireAccount, requireAdmin, (_request, response) => {

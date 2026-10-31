@@ -72,6 +72,8 @@ function App() {
   const [account, setAccount] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [authBusy, setAuthBusy] = useState(false);
+  const [entryMode, setEntryMode] = useState("public");
+  const [publicRepositoryUrl, setPublicRepositoryUrl] = useState("");
   const [activeView, setActiveView] = useState("scan");
   const [history, setHistory] = useState([]);
   const [report, setReport] = useState(null);
@@ -156,6 +158,7 @@ function App() {
       setReport(null);
       setHistory([]);
       setActiveView("scan");
+      setEntryMode("public");
     } catch (requestError) {
       setError(requestError.message || "Could not end the session.");
     }
@@ -193,6 +196,29 @@ function App() {
       refreshHistory();
     } catch (requestError) {
       setError(requestError.message || "Could not reach DepGuard. Check the API container and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function scanPublicRepository(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setReport(null);
+    try {
+      const response = await fetch(`${apiUrl}/api/public-scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repositoryUrl: publicRepositoryUrl.trim() })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Public repository review failed.");
+      setReport(data);
+      setUsername(data.username);
+      refreshOverview();
+    } catch (requestError) {
+      setError(requestError.message || "Could not review this repository. Check the URL and try again.");
     } finally {
       setBusy(false);
     }
@@ -250,7 +276,25 @@ function App() {
           <div className="privacy"><span>◈</span> Public repositories under @{account.username} <i /> No code is executed</div>
         </> : <>
           <h1>Know what your<br /><span>dependencies expose.</span></h1>
-          <p className="intro">Create an account with your GitHub username, then scan a public repository and keep its reports in your account.</p>
+          <p className="intro">{entryMode === "public"
+            ? "Paste a public GitHub repository link to review its exact dependency versions and known advisories. No account needed."
+            : "Sign in to keep repository reviews in your account, or create an account with your GitHub username."}</p>
+          <div className="entry-tabs" role="tablist" aria-label="Choose how to review a repository">
+            <button type="button" role="tab" aria-selected={entryMode === "public"} onClick={() => { setEntryMode("public"); setError(""); }}>Public review</button>
+            <button type="button" role="tab" aria-selected={entryMode === "account"} onClick={() => { setEntryMode("account"); setError(""); }}>Account</button>
+          </div>
+          {entryMode === "public" ? <>
+            <form className="public-search" onSubmit={scanPublicRepository}>
+              <label htmlFor="public-repository-url">Public GitHub repository URL</label>
+              <div className="search public-url-entry">
+                <span className="github-glyph" aria-hidden="true">⌘</span>
+                <input id="public-repository-url" type="url" inputMode="url" value={publicRepositoryUrl} onChange={(event) => setPublicRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repository" required disabled={busy} />
+                <button type="submit" disabled={busy || !publicRepositoryUrl.trim()}>{busy ? <><span className="spinner" /> Reviewing</> : "Review repository"}</button>
+              </div>
+            </form>
+            <p className="public-scan-note">Only public repositories are accepted. Anonymous reviews are stored without an account and are not added to personal history.</p>
+            <div className="privacy"><span>◈</span> No sign-in required <i /> No repository code is executed</div>
+          </> : <>
           <form className="search account-form" onSubmit={authenticate}>
             <label>
               <span>GitHub username</span>
@@ -264,14 +308,15 @@ function App() {
           </form>
           <div className="auth-switch">{authMode === "register" ? "Already registered?" : "New to DepGuard?"} <button onClick={() => { setAuthMode(authMode === "register" ? "login" : "register"); setError(""); }}>{authMode === "register" ? "Sign in" : "Create an account"}</button></div>
           <div className="privacy"><span>◈</span> Public GitHub profile required; ownership is not verified <i /> Passwords are salted and hashed</div>
+          </>}
         </>}
         {error && <div className="error-banner" role="alert">{error}</div>}
-        {busy && <div className="progress-note"><span className="spinner dark" /> Inspecting repositories and checking exact versions against OSV. This can take a moment for large profiles.</div>}
+        {busy && <div className="progress-note"><span className="spinner dark" /> {account ? "Inspecting the repository and checking exact versions against OSV." : "Reviewing the repository and checking exact versions against OSV."} This can take a moment.</div>}
       </section>
 
       {report ? <section className="results">
         <div className="report-heading">
-          <div><div className="eyebrow"><span className="eyebrow-line" /> SCAN REPORT</div><h2>@{report.username}<span className="report-status">{report.status === "completed" ? "Complete" : "Partial coverage"}</span></h2></div>
+          <div><div className="eyebrow"><span className="eyebrow-line" /> SCAN REPORT</div><h2>{report.repositoryName ? `${report.username} / ${report.repositoryName}` : `@${report.username}`}<span className="report-status">{report.status === "completed" ? "Complete" : "Partial coverage"}</span></h2></div>
           <div className="export-actions"><button onClick={() => downloadReport(report, "json")}>Export JSON ↓</button><button onClick={() => downloadReport(report, "csv")}>Export CSV ↓</button></div>
         </div>
         <div className="metrics">
@@ -294,7 +339,7 @@ function App() {
 
         <div className="table-wrap">
           <table><thead><tr><th>PACKAGE</th><th>VERSION</th><th>TYPE</th><th>REPOSITORY / MANIFEST</th><th>STATUS</th></tr></thead>
-            <tbody>{entries.map(({ repository, manifest, dependency }, index) => <DependencyRow key={`${repository.fullName}:${manifest.path}:${dependency.name}:${dependency.dependencyType}:${index}`} scanId={report.scanId} {...{ repository, manifest, dependency }} />)}</tbody>
+            <tbody>{entries.map(({ repository, manifest, dependency }, index) => <DependencyRow key={`${repository.fullName}:${manifest.path}:${dependency.name}:${dependency.dependencyType}:${index}`} scanId={report.scanId} publicScan={report.publicScan} {...{ repository, manifest, dependency }} />)}</tbody>
           </table>
           {!entries.length && <div className="empty">No dependencies match these filters. Try broadening your selection.</div>}
         </div>
@@ -349,7 +394,7 @@ function StatusTag({ status, label }) {
   return <span className={`status-tag ${status}`}>{label || statusNames[status] || status.replaceAll("_", " ")}</span>;
 }
 
-function DependencyRow({ repository, manifest, dependency, scanId }) {
+function DependencyRow({ repository, manifest, dependency, scanId, publicScan }) {
   const [recommendation, setRecommendation] = useState(null);
   const [recommendationError, setRecommendationError] = useState("");
   const [recommending, setRecommending] = useState(false);
@@ -358,7 +403,8 @@ function DependencyRow({ repository, manifest, dependency, scanId }) {
     setRecommending(true);
     setRecommendationError("");
     try {
-      const response = await fetch(`${apiUrl}/api/history/${encodeURIComponent(scanId)}/recommendations`, {
+      const route = publicScan ? "public-scans" : "history";
+      const response = await fetch(`${apiUrl}/api/${route}/${encodeURIComponent(scanId)}/recommendations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ packageName: dependency.name, currentVersion: dependency.resolvedVersion })
