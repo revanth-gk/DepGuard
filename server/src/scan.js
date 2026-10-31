@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { listRepositories, listRepositoryFiles, getRepositoryFile } from "./github.js";
 import { selectLockfileForManifest, resolveWithNpmLock } from "./lockfile.js";
 import { mapWithConcurrency, queryOsv } from "./osv.js";
+import { HttpError } from "./errors.js";
 
 const dependencyGroups = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 
@@ -100,10 +101,22 @@ async function inspectRepository(repository) {
   return result;
 }
 
-export async function runScan(username) {
+export async function runScan(username, repositoryName) {
   const discovered = await listRepositories(username);
+  const selectedRepositories = repositoryName
+    ? discovered.filter((repository) =>
+      repository.name.toLowerCase() === repositoryName.toLowerCase() &&
+      repository.owner.login.toLowerCase() === username.toLowerCase())
+    : discovered;
+  if (repositoryName && selectedRepositories.length === 0) {
+    throw new HttpError(404, "That public repository was not found under your account.", "REPOSITORY_NOT_FOUND");
+  }
+  if (repositoryName && selectedRepositories.length > 1) {
+    throw new HttpError(400, "More than one repository matched that name. Use the full repository name.", "AMBIGUOUS_REPOSITORY");
+  }
   const summary = emptySummary(discovered.length);
-  const repositories = await mapWithConcurrency(discovered, inspectRepository);
+  if (repositoryName) summary.repositoriesFound = selectedRepositories.length;
+  const repositories = await mapWithConcurrency(selectedRepositories, inspectRepository);
   for (const repository of repositories) {
     summary.repositoriesScanned += repository.status === "failed" ? 0 : 1;
     if (repository.manifests.length) summary.repositoriesWithPackageJson += 1;
@@ -146,6 +159,7 @@ export async function runScan(username) {
   return {
     scanId: randomUUID(),
     username,
+    repositoryName: repositoryName ?? null,
     status: summary.scanErrors ? "partial" : "completed",
     scannedAt: new Date().toISOString(),
     persisted: true,

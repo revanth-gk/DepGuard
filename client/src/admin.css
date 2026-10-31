@@ -1,0 +1,58 @@
+.topbar-actions,.account-menu{display:flex;align-items:center;gap:14px}
+.account-label{color:#a7b3ae;font:11px "DM Mono",monospace}
+.nav-action{background:transparent;border:1px solid #344147;border-radius:4px;padding:7px 10px;color:#b6c1bd;font-size:11px;cursor:pointer}
+.nav-action:hover{border-color:#71817c;color:#edf3ee}
+.auth-switch{margin:0 auto 15px;color:#96a3a0;font-size:12px}
+.auth-switch button{border:0;background:transparent;color:var(--green);font:600 12px "DM Sans",sans-serif;cursor:pointer;padding:4px}
+.account-form{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;text-align:left}
+.account-form label{display:flex;flex-direction:column;gap:6px;color:#829096;font-size:10px}
+.account-form input{width:100%;border:1px solid transparent}
+.repo-owner{color:#a1b0aa;font:12px "DM Mono",monospace;white-space:nowrap;padding-left:9px}
+.recommend-button{display:block;margin-top:8px;padding:6px 7px;border:1px solid #45603b;border-radius:4px;color:#b8e898;background:#192417;font-size:10px;cursor:pointer;white-space:nowrap}
+.recommend-button:disabled{opacity:.55;cursor:wait}
+.recommendation-result{max-width:260px;margin-top:8px;padding:8px;border-left:2px solid #9edb7e;background:#151e17;color:#b9c9b8;font-size:10px;line-height:1.55}
+.recommendation-result>div+div{margin-top:7px}
+.recommendation-result code{overflow-wrap:anywhere}
+.recommendation-error{color:#ff9a85}
+.admin-shell{max-width:1440px}
+.admin-content{padding:42px 0 70px}
+.admin-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.admin-kicker{font:10px "DM Mono",monospace;letter-spacing:.1em;color:#9bad9e;margin:0 0 8px}
+.admin-heading h1{font:700 33px Manrope;letter-spacing:-1.3px;margin:0}
+.admin-heading p:last-child{color:#91a09c;font-size:13px;margin:8px 0 0}
+.admin-lock{border:1px solid #5a5032;border-radius:4px;background:#242117;color:#e0c47f;padding:7px 9px;font:10px "DM Mono",monospace}
+.schema-notice{border-left:2px solid #d5b87b;background:#1a1914;padding:11px 14px;color:#bcb39a;font-size:11px;line-height:1.5;margin:20px 0}
+.admin-toolbar{display:flex;align-items:flex-end;justify-content:space-between;margin:22px 0 12px;color:#96a4a0;font:11px "DM Mono",monospace}
+.admin-toolbar label{display:flex;flex-direction:column;gap:6px;color:#9ca9a5}
+.admin-toolbar select,.admin-fields input,.admin-fields select,.admin-fields textarea{min-width:220px;background:#11191e;border:1px solid #344147;border-radius:4px;color:#e1e9e5;padding:9px;font:12px "DM Sans",sans-serif}
+.admin-table-wrap{overflow:auto;max-height:65vh;border:1px solid #29363b;border-radius:6px;background:#10171b}
+.admin-table{width:100%;border-collapse:collapse;text-align:left}
+.admin-table th{position:sticky;top:0;background:#151e22;color:#829096;font:10px "DM Mono",monospace;padding:11px;border-bottom:1px solid #344147}
+.admin-table td{max-width:300px;padding:9px 11px;border-bottom:1px solid #222e33;color:#b5c0bd;font-size:11px;vertical-align:top}
+.admin-cell{display:block;max-height:80px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:"DM Mono",monospace;font-size:10px}
+.admin-row-actions{display:flex;gap:6px}
+.admin-row-actions button,.admin-pagination button{background:#192226;border:1px solid #38474b;border-radius:3px;color:#c5cfca;padding:6px 8px;font-size:10px;cursor:pointer;white-space:nowrap}
+.admin-row-actions button:hover,.admin-pagination button:hover:not(:disabled){border-color:#87968e}
+.admin-row-actions .danger-action{color:#ff9b88;border-color:#603a35}
+.admin-pagination{display:flex;justify-content:space-between;align-items:center;color:#849294;font:10px "DM Mono",monospace;margin:12px 0}
+.admin-pagination>div{display:flex;gap:7px}
+.admin-pagination button:disabled{opacity:.4;cursor:not-allowed}
+.admin-footnote{font-size:10px;color:#78878a}
+.admin-notice{margin:10px 0;border:1px solid #385433;background:#182418;border-radius:4px;padding:10px 12px;color:#b5df9d;font-size:12px}
+.admin-modal-backdrop{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:20px;background:#05090bcc}
+.admin-modal{width:min(720px,100%);max-height:90vh;overflow:auto;border:1px solid #39474a;border-radius:7px;background:#10181c;padding:22px}
+.admin-modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:17px}
+.admin-modal-head h2{margin:0;font:600 19px Manrope}
+.admin-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.admin-fields label{display:flex;flex-direction:column;gap:6px;color:#9daaa6;font:11px "DM Mono",monospace}
+.admin-fields input,.admin-fields select,.admin-fields textarea{width:100%;min-width:0}
+.admin-fields textarea{resize:vertical}
+.admin-fields label:has(textarea){grid-column:span 2}
+.admin-modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+.primary-action{background:var(--green);border:0;border-radius:4px;padding:9px 13px;color:#17220f;font-weight:700;cursor:pointer}
+.primary-action:disabled{opacity:.6;cursor:wait}
+.reset-password-field{display:flex;flex-direction:column;gap:7px;color:#a8b4b0;font-size:12px}
+.reset-password-field input{background:#11191e;border:1px solid #344147;border-radius:4px;padding:10px;color:#e1e9e5;font:13px "DM Sans",sans-serif}
+@media(max-width:850px){.account-menu{gap:7px}.account-label{font-size:9px}.admin-table-wrap{max-height:60vh}}
+@media(max-width:650px){.topbar-actions{gap:8px}.topnote{display:none}.account-menu{gap:6px}.account-label{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nav-action{font-size:10px;padding:6px}.account-form{grid-template-columns:1fr}.repo-owner{padding:9px}.account-form button{min-height:42px}.admin-content{padding-top:27px}.admin-heading{align-items:flex-start;gap:10px}.admin-heading h1{font-size:27px}.admin-heading p:last-child{max-width:250px;line-height:1.5}.admin-lock{font-size:8px}.admin-fields{grid-template-columns:1fr}.admin-fields label:has(textarea){grid-column:auto}.admin-modal{padding:16px}.admin-toolbar select{min-width:190px}}
+@media(prefers-reduced-motion:reduce){.admin-modal-backdrop{scroll-behavior:auto}}

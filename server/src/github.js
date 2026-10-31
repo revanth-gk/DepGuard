@@ -41,6 +41,12 @@ export async function listRepositories(username) {
   }
 }
 
+export async function getPublicGithubUser(username) {
+  const user = await githubRequest(`/users/${encodeURIComponent(username)}`);
+  if (typeof user.login !== "string") throw new HttpError(502, "GitHub returned an unexpected profile.", "GITHUB_RESPONSE");
+  return { login: user.login, name: user.name ?? null, avatarUrl: user.avatar_url ?? null };
+}
+
 function isEligibleManifest(path) {
   const parts = path.split("/");
   return parts.at(-1) === "package.json" && !parts.slice(0, -1).some((part) => excluded.has(part));

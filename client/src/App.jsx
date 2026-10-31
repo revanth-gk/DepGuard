@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import AdminConsole from "./components/AdminConsole.jsx";
 
 const apiUrl = import.meta.env.VITE_API_URL || "";
 const statusNames = {
@@ -66,6 +67,13 @@ function downloadReport(report, format) {
 
 function App() {
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [repositoryName, setRepositoryName] = useState("");
+  const [account, setAccount] = useState(null);
+  const [authMode, setAuthMode] = useState("login");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [activeView, setActiveView] = useState("scan");
+  const [history, setHistory] = useState([]);
   const [report, setReport] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -76,6 +84,16 @@ function App() {
   const [sort, setSort] = useState("severity");
   const [overview, setOverview] = useState(null);
   const [overviewError, setOverviewError] = useState("");
+
+  async function refreshHistory() {
+    try {
+      const response = await fetch(`${apiUrl}/api/history`);
+      const data = await response.json();
+      if (response.ok) setHistory(data.scans);
+    } catch (requestError) {
+      setOverviewError(requestError.message || "Could not load your scan history.");
+    }
+  }
 
   async function refreshOverview() {
     try {
@@ -91,7 +109,57 @@ function App() {
 
   useEffect(() => {
     refreshOverview();
+    fetch(`${apiUrl}/api/auth/me`)
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (data?.account) {
+          setAccount(data.account);
+          setUsername(data.account.username);
+          refreshHistory();
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  async function authenticate(event) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/${authMode === "register" ? "register" : "login"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Account request failed.");
+      setAccount(data.account);
+      setUsername(data.account.username);
+      setPassword("");
+      setActiveView("scan");
+      refreshHistory();
+    } catch (requestError) {
+      setError(requestError.message || "Could not complete the account request.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signOut() {
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/logout`, { method: "POST" });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Could not end the session.");
+      }
+      setAccount(null);
+      setReport(null);
+      setHistory([]);
+      setActiveView("scan");
+    } catch (requestError) {
+      setError(requestError.message || "Could not end the session.");
+    }
+  }
 
   async function openSavedScan(scanId) {
     setError("");
@@ -116,12 +184,13 @@ function App() {
       const response = await fetch(`${apiUrl}/api/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim() })
+        body: JSON.stringify({ repositoryName: repositoryName.trim() })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Scan failed.");
       setReport(data);
       refreshOverview();
+      refreshHistory();
     } catch (requestError) {
       setError(requestError.message || "Could not reach DepGuard. Check the API container and try again.");
     } finally {
@@ -147,25 +216,55 @@ function App() {
         : severityRank(a.dependency.vulnerabilities) - severityRank(b.dependency.vulnerabilities));
   }, [report, statusFilter, severityFilter, repositoryFilter, typeFilter, sort]);
 
+  if (account?.role === "admin" && activeView === "admin") {
+    return <AdminConsole account={account} onBack={() => setActiveView("scan")} onSignOut={signOut} />;
+  }
+
   return (
     <main className="shell">
       <header className="topbar">
         <a className="brand" href="#" onClick={() => { setReport(null); setError(""); }}>
           <span className="brand-mark">D</span><span>depguard<span className="brand-dot">.</span></span>
         </a>
-        <div className="topnote"><span className="pulse" /> PUBLIC REPOSITORY SCANNER</div>
+        <div className="topbar-actions">
+          <div className="topnote"><span className="pulse" /> PUBLIC REPOSITORY SCANNER</div>
+          {account ? <div className="account-menu">
+            <span className="account-label">@{account.username}{account.role === "admin" ? " · ADMIN" : ""}</span>
+            {account.role === "admin" && <button className="nav-action" onClick={() => { setActiveView("admin"); setReport(null); }}>Database</button>}
+            <button className="nav-action" onClick={signOut}>Sign out</button>
+          </div> : null}
+        </div>
       </header>
 
       <section className={`hero ${report ? "hero-compact" : ""}`}>
         <div className="eyebrow"><span className="eyebrow-line" /> DEPENDENCY INTELLIGENCE</div>
-        <h1>Know what your<br /><span>dependencies expose.</span></h1>
-        <p className="intro">Scan public GitHub repositories for known vulnerabilities in npm dependencies. Evidence-led findings, with coverage gaps made clear.</p>
-        <form className="search" onSubmit={scan}>
-          <span className="github-glyph">⌘</span>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="GitHub username" aria-label="GitHub username" required disabled={busy} />
-          <button type="submit" disabled={busy || !username.trim()}>{busy ? <><span className="spinner" /> Scanning</> : <>Scan repositories <span aria-hidden="true">↗</span></>}</button>
-        </form>
-        <div className="privacy"><span>◈</span> Public repositories only <i /> No code is executed <i /> No login required</div>
+        {account ? <>
+          <h1>One repository.<br /><span>Clearer dependency decisions.</span></h1>
+          <p className="intro">Signed in as @{account.username}. Enter a repository owned by this GitHub account to inspect its dependencies.</p>
+          <form className="search" onSubmit={scan}>
+            <span className="github-glyph">⌘</span>
+            <span className="repo-owner">{account.username} /</span>
+            <input value={repositoryName} onChange={(event) => setRepositoryName(event.target.value)} placeholder="repository-name" aria-label="GitHub repository name" required disabled={busy} />
+            <button type="submit" disabled={busy || !repositoryName.trim()}>{busy ? <><span className="spinner" /> Scanning</> : <>Scan repository <span aria-hidden="true">↗</span></>}</button>
+          </form>
+          <div className="privacy"><span>◈</span> Public repositories under @{account.username} <i /> No code is executed</div>
+        </> : <>
+          <h1>Know what your<br /><span>dependencies expose.</span></h1>
+          <p className="intro">Create an account with your GitHub username, then scan a public repository and keep its reports in your account.</p>
+          <form className="search account-form" onSubmit={authenticate}>
+            <label>
+              <span>GitHub username</span>
+              <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="octocat" aria-label="GitHub username" required disabled={authBusy} autoComplete="username" />
+            </label>
+            <label>
+              <span>Password</span>
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={authMode === "register" ? "At least 12 characters" : "Your password"} aria-label="Password" required disabled={authBusy} autoComplete={authMode === "register" ? "new-password" : "current-password"} minLength={authMode === "register" ? 12 : 1} />
+            </label>
+            <button type="submit" disabled={authBusy || !username.trim() || !password}>{authBusy ? <><span className="spinner" /> Working</> : authMode === "register" ? "Create account" : "Sign in"}</button>
+          </form>
+          <div className="auth-switch">{authMode === "register" ? "Already registered?" : "New to DepGuard?"} <button onClick={() => { setAuthMode(authMode === "register" ? "login" : "register"); setError(""); }}>{authMode === "register" ? "Sign in" : "Create an account"}</button></div>
+          <div className="privacy"><span>◈</span> Public GitHub profile required; ownership is not verified <i /> Passwords are salted and hashed</div>
+        </>}
         {error && <div className="error-banner" role="alert">{error}</div>}
         {busy && <div className="progress-note"><span className="spinner dark" /> Inspecting repositories and checking exact versions against OSV. This can take a moment for large profiles.</div>}
       </section>
@@ -195,7 +294,7 @@ function App() {
 
         <div className="table-wrap">
           <table><thead><tr><th>PACKAGE</th><th>VERSION</th><th>TYPE</th><th>REPOSITORY / MANIFEST</th><th>STATUS</th></tr></thead>
-            <tbody>{entries.map(({ repository, manifest, dependency }, index) => <DependencyRow key={`${repository.fullName}:${manifest.path}:${dependency.name}:${dependency.dependencyType}:${index}`} {...{ repository, manifest, dependency }} />)}</tbody>
+            <tbody>{entries.map(({ repository, manifest, dependency }, index) => <DependencyRow key={`${repository.fullName}:${manifest.path}:${dependency.name}:${dependency.dependencyType}:${index}`} scanId={report.scanId} {...{ repository, manifest, dependency }} />)}</tbody>
           </table>
           {!entries.length && <div className="empty">No dependencies match these filters. Try broadening your selection.</div>}
         </div>
@@ -224,10 +323,10 @@ function App() {
         </div>
         <div className="vault-grid">
           <div className="vault-panel"><h4>Recent scans</h4>
-            {overview?.recentScans.length ? overview.recentScans.map((savedScan) => <button className="saved-scan" key={savedScan.id} onClick={() => openSavedScan(savedScan.id)}>
-              <span><strong>@{savedScan.username}</strong><small>{new Date(savedScan.scannedAt).toLocaleString()}</small></span>
+            {account ? history.length ? history.map((savedScan) => <button className="saved-scan" key={savedScan.id} onClick={() => openSavedScan(savedScan.id)}>
+              <span><strong>{savedScan.repositoryName || savedScan.username}</strong><small>{new Date(savedScan.scannedAt).toLocaleString()}</small></span>
               <span className="saved-scan-count">{savedScan.vulnerableOccurrences} findings · {savedScan.repositoriesFound} repos</span>
-            </button>) : <p className="vault-empty">No saved scans yet. Run a public profile scan to create the first evidence record.</p>}
+            </button>) : <p className="vault-empty">Your saved reports will appear here after your first repository scan.</p> : <p className="vault-empty">Sign in to see the scan reports saved to your account.</p>}
           </div>
           <div className="vault-panel"><h4>Most-seen vulnerable packages</h4>
             {overview?.topVulnerablePackages.length ? overview.topVulnerablePackages.map((packageItem) => <div className="package-stat" key={packageItem.name}>
@@ -250,7 +349,30 @@ function StatusTag({ status, label }) {
   return <span className={`status-tag ${status}`}>{label || statusNames[status] || status.replaceAll("_", " ")}</span>;
 }
 
-function DependencyRow({ repository, manifest, dependency }) {
+function DependencyRow({ repository, manifest, dependency, scanId }) {
+  const [recommendation, setRecommendation] = useState(null);
+  const [recommendationError, setRecommendationError] = useState("");
+  const [recommending, setRecommending] = useState(false);
+
+  async function getRecommendation() {
+    setRecommending(true);
+    setRecommendationError("");
+    try {
+      const response = await fetch(`${apiUrl}/api/history/${encodeURIComponent(scanId)}/recommendations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packageName: dependency.name, currentVersion: dependency.resolvedVersion })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not create recommendations.");
+      setRecommendation(data);
+    } catch (requestError) {
+      setRecommendationError(requestError.message || "Recommendation request failed.");
+    } finally {
+      setRecommending(false);
+    }
+  }
+
   return <tr>
     <td><strong className="package-name">{dependency.name}</strong>{dependency.vulnerabilities.map((vulnerability) => <details className="advisory" key={vulnerability.id}>
       <summary>{vulnerability.id} · {vulnerability.severity}</summary><p>{vulnerability.summary}</p>
@@ -263,7 +385,19 @@ function DependencyRow({ repository, manifest, dependency }) {
     <td><code>{dependency.resolvedVersion || "—"}</code><span className="declared">declared {dependency.declaredVersion}</span></td>
     <td>{dependencyNames[dependency.dependencyType]}</td>
     <td><a className="repo-link" href={repository.url} target="_blank" rel="noreferrer">{repository.name} ↗</a><span className="declared">{manifest.path}</span></td>
-    <td><StatusTag status={dependency.status} />{dependency.error && <span className="declared">{dependency.error}</span>}</td>
+    <td><StatusTag status={dependency.status} />{dependency.error && <span className="declared">{dependency.error}</span>}
+      {dependency.status === "vulnerable" && <button className="recommend-button" onClick={getRecommendation} disabled={recommending}>{recommending ? "Checking candidates…" : "Find a safer option"}</button>}
+      {recommendationError && <span className="declared recommendation-error" role="alert">{recommendationError}</span>}
+      {recommendation && <div className="recommendation-result">
+        {recommendation.suggestions.map((suggestion) => <div key={`${suggestion.kind}:${suggestion.packageName}:${suggestion.version}`}>
+          <strong>{suggestion.kind === "upgrade" ? "Update" : "Alternative"}: </strong><code>{suggestion.packageName}@{suggestion.version}</code>
+          {suggestion.majorUpgrade && <span className="declared">major version change</span>}
+          {suggestion.reason && <span className="declared">{suggestion.reason}</span>}
+        </div>)}
+        {recommendation.notes.map((note) => <span className="declared" key={note}>{note}</span>)}
+        <span className="declared">{recommendation.disclaimer}</span>
+      </div>}
+    </td>
   </tr>;
 }
 
