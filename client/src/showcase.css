@@ -1,0 +1,30 @@
+.showcase{max-width:900px;margin:66px auto 0}
+.showcase .section-title{align-items:flex-end;margin-bottom:16px}
+.showcase .section-title h3{font-size:20px}
+.database-status{font:10px "DM Mono",monospace;color:#93c87a}
+.showcase-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.showcase-metrics .metric{min-height:77px;padding:13px}
+.showcase-metrics .metric strong{font-size:22px}
+.vault-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;margin-top:12px}
+.vault-panel{border:1px solid #263237;background:#11191e;border-radius:6px;padding:16px}
+.vault-panel h4{font:600 13px Manrope;margin:0 0 11px;color:#d4dfd9}
+.saved-scan{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-top:1px solid #222e33;padding:11px 2px;color:#cbd5d0;cursor:pointer}
+.saved-scan:hover strong{color:var(--green)}
+.saved-scan strong{font:500 12px "DM Mono"}
+.saved-scan small{display:block;color:#78878a;font-size:10px;margin-top:5px}
+.saved-scan-count{font:10px "DM Mono";color:#98a6a2}
+.package-stat{display:flex;justify-content:space-between;border-top:1px solid #222e33;padding:11px 1px;color:#93a09e;font-size:11px}
+.package-stat code{font:11px "DM Mono";color:#e0aaa0}
+.vault-empty{color:#879496;font-size:11px;line-height:1.6}
+.vault-note{text-align:center;color:#718083;font-size:10px;margin:12px 0 0}
+.search input:focus-visible,.search button:focus-visible,.filters select:focus-visible,.export-actions button:focus-visible,.saved-scan:focus-visible,.brand:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+@media(max-width:600px){
+  .showcase{margin-top:48px}
+  .showcase-metrics{grid-template-columns:repeat(2,1fr)}
+  .showcase-metrics .metric:last-child{grid-column:span 2}
+  .vault-grid{grid-template-columns:1fr}
+  .saved-scan{align-items:flex-start;gap:8px;flex-direction:column}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}

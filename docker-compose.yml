@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: depguard
+      POSTGRES_USER: depguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-depguard-local}
+    volumes:
+      - depguard-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U depguard -d depguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      PORT: 4000
+      CLIENT_ORIGIN: http://localhost:8080
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: depguard
+      PGUSER: depguard
+      PGPASSWORD: ${POSTGRES_PASSWORD:-depguard-local}
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  depguard-postgres-data:
