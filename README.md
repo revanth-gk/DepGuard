@@ -5,24 +5,42 @@ DepGuard scans public GitHub repositories for known npm dependency vulnerabiliti
 ## Architecture
 
 ```text
-Browser: React + Vite
+Browser: JavaScript + React 18
+  └─ Vite 6 + @vitejs/plugin-react build
   └─ same-origin /api requests
-     └─ Nginx: static assets + reverse proxy
-        └─ Express API
-           ├─ Account/session service (scrypt + HttpOnly cookies)
-           ├─ GitHub REST API (public profile/repository files)
-           ├─ npm registry + OSV (versions and advisory verification)
-           ├─ Optional Groq API (candidate alternative package names)
-           └─ PostgreSQL
-              ├─ accounts / auth_sessions
-              ├─ scans / scan_repositories / scan_manifests
-              ├─ scan_dependencies / scan_advisories
-              └─ scan_recommendations
+  └─ Docker Compose
+     ├─ Nginx 1.27 (static assets + reverse proxy)
+     ├─ Node.js 22 + Express 4 API
+     │  ├─ GitHub REST API (public repositories and files)
+     │  ├─ npm registry + OSV API (versions and advisory verification)
+     │  ├─ Optional Groq API (alternative package candidates)
+     │  └─ PostgreSQL 17
+     └─ PostgreSQL named volume (persistent data)
 ```
 
 Only the API talks to GitHub, npm, OSV, Groq, or PostgreSQL. Nginx proxies `/api` inside Docker, so the browser uses the same origin. Public repository files are parsed as data; DepGuard never clones a repository, runs its code, or installs packages.
 
 PostgreSQL stores scan reports as JSONB for replay and in normalized tables for database-backed summaries and administration. A named Docker volume persists this data across container restarts and rebuilds.
+
+## Technology stack
+
+| Layer | Technologies | Role |
+|---|---|---|
+| Application language | JavaScript (ES modules), JSX | Frontend and backend application code |
+| Frontend | React 18, React DOM 18 | Interactive scanner, report views, account and admin interfaces |
+| Frontend tooling | Vite 6, `@vitejs/plugin-react` | Local development server and optimized production build |
+| Backend | Node.js 22, Express 4 | REST API, public scans, authentication, and recommendations |
+| Database | PostgreSQL 17, SQL, JSONB | Accounts, sessions, scan summaries, findings, and persisted reports |
+| Database client | `pg` | Parameterized PostgreSQL access and connection pooling |
+| Reverse proxy / web server | Nginx 1.27 | Serves the built frontend and proxies same-origin `/api` requests |
+| Containers | Docker, Docker Compose | Reproducible frontend, API, and database services |
+| Package data | npm registry | Published package versions for upgrade and alternative checks |
+| Vulnerability data | OSV API | Advisory checks against exact npm package versions |
+| Repository data | GitHub REST API | Public repository metadata, manifests, and lockfiles |
+| Optional AI suggestions | Groq Chat Completions API | Suggests alternative package names; suggestions are independently verified |
+| Password and session security | Node.js `crypto` (`scrypt`, SHA-256, secure random tokens), HttpOnly cookies | Password hashing and server-managed sessions |
+| Version handling | `semver` | Orders stable upgrade candidates |
+| Testing | Node.js built-in test runner (`node:test`) | Authentication, URL validation, lockfile, and recommendation tests |
 
 ## Start the application
 
@@ -43,7 +61,7 @@ To clear saved state, run `docker compose down --volumes`; this permanently dele
 
 ## Accounts and repository scans
 
-Anyone can paste a public GitHub repository URL in **Public review** and run the same dependency checks without signing in. Anonymous reports are stored without account ownership for aggregate evidence, but are not added to personal history. Public scans are limited to three attempts per client IP every 15 minutes and two simultaneous scans per server; public recommendation requests are limited to ten per IP every 15 minutes.
+Anyone can paste a public GitHub repository URL in **Public review** and run the same dependency checks without signing in. Anonymous reports are stored without account ownership for aggregate evidence, but are not added to personal history. There is no per-IP public scan attempt limit; at most two public scans run simultaneously to protect service capacity. Public recommendation requests are limited to ten per IP every 15 minutes.
 
 To keep a private review history, create an account using the same username as a public GitHub profile, then sign in and enter one repository name owned by that username. A report is stored under the signed-in account and can be reopened from its history. Saved scan and recommendation endpoints enforce account ownership. The account name is checked against GitHub, but this username/password flow does **not** prove control of that GitHub account; do not treat it as GitHub OAuth or identity verification.
 

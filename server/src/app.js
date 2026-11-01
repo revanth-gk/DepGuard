@@ -38,11 +38,9 @@ const app = express();
 const windows = new Map();
 const windowMs = 15 * 60 * 1000;
 const maxRequests = 10;
-const publicScanAttempts = new Map();
-const publicScanWindowMs = 15 * 60 * 1000;
-const maxPublicScansPerWindow = 3;
 const maxConcurrentPublicScans = 2;
 const publicRecommendationAttempts = new Map();
+const publicScanWindowMs = 15 * 60 * 1000;
 const maxPublicRecommendationsPerWindow = 10;
 let activePublicScans = 0;
 const authAttempts = new Map();
@@ -334,25 +332,10 @@ app.post("/api/public-scan", async (request, response, next) => {
     return;
   }
 
-  const now = Date.now();
-  const ip = request.ip;
-  const current = publicScanAttempts.get(ip);
   if (activePublicScans >= maxConcurrentPublicScans) {
     response.status(503).json({ error: "Public scans are busy. Try again shortly.", code: "PUBLIC_SCANS_BUSY" });
     return;
   }
-  if (publicScanAttempts.size > 5000) {
-    for (const [address, entry] of publicScanAttempts) {
-      if (now - entry.startedAt >= publicScanWindowMs) publicScanAttempts.delete(address);
-    }
-  }
-  if (!current || now - current.startedAt >= publicScanWindowMs) {
-    publicScanAttempts.set(ip, { startedAt: now, count: 1 });
-  } else if (++current.count > maxPublicScansPerWindow) {
-    response.status(429).json({ error: "Public scan limit reached. Try again in 15 minutes.", code: "PUBLIC_SCAN_RATE_LIMITED" });
-    return;
-  }
-
   activePublicScans += 1;
   try {
     const report = await runPublicRepositoryScan(repository.owner, repository.repository);
